@@ -1,0 +1,6 @@
+#!/bin/sh
+
+. alba_blissrc
+
+cd $SICILIA/ds/python/BeamKiller
+screen -dm -S BeamKiller-$1 python BeamKiller.py $1 $2 -v4
