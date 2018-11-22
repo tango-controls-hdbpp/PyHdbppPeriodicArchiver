@@ -627,7 +627,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 				aux['period'] = period
 				aux['attempts'] = 0
 				aux['started'] = True
-				aux['avb_buffer'] = []
+				aux['avg_per_buffer'] = []
 			self._attrDict[attribute.lower()] = aux
 			
 		# Update attributes List
@@ -670,7 +670,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			
 	def addPeriodData(self, attribute, period):
 		if attribute in self._attrDict.keys():
-			vals = self._attrDict[attribute]['avb_buffer']
+			vals = self._attrDict[attribute]['avg_per_buffer']
 			if len(vals) >= self.AverageBufferSize:
 				vals.pop(0)
 			vals.append(period)
@@ -680,7 +680,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 				avg_value = avg_value + el
 			avg_value = avg_value / len(vals)
 			
-			self._attrDict[attribute]['avb_buffer'] = vals
+			self._attrDict[attribute]['avg_per_buffer'] = vals
 			self._attrDict[attribute]['average_period'] = avg_value
 			
 			
