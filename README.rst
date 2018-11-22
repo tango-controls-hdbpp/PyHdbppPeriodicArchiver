@@ -15,22 +15,25 @@ Once the instance is created, a thread is created that periodically insert the a
 Properties
 ==========
 
-- 'AttributeList':
+- AsynchronousInsert:
+	This property defines if the DS inserts attributes in HDB++ using an asynchronous thread or not.
+
+- AttributeList:
 	List that contains the attributes and their refresh period to be inserted in HDB++. The format of this list is long_attrbiute_name;period=value_in_miliseconds
 
-- 'AutoStart':
+- AutoStart:
 	This property if set, forces the device serve to automatically launch the insert thread at init
 
-- 'DefaultAttPeriod':
+- DefaultAttPeriod:
 	Default period in ms to archive attributes
 
-- 'ConfigurationManagerDS':
+- ConfigurationManagerDS:
 	HDB++ configuration manager device with the corresponding HDB++ configuration to access
 
-- 'Attemps':
+- Attemps:
 	Number of attemps before reporting error to insert an attribute in HDB++ in case of failure
 
-- 'ThreadPeriod':
+- ThreadPeriod:
 	"Time in which the Periodic Archiver thread is executed in miliseconds",
 
 
@@ -48,6 +51,9 @@ Commands
 	
 - Reset():
 	Executes an Stop and sets the state INIT.
+	
+- AttributeAveragePeriod(attribute):
+	This command returns the average insert period calculated for an attribute
 	
 - AttributeData(attribute):
 	Returns dictionary converted to string with the configuration for the selected attribute
@@ -76,28 +82,28 @@ Commands
 Attributes
 ==========
 
-- AttributesList:
-	READ_ONLY: List with the atributes to be controlled by the PeriodicArchiver thread
+- AttributesAveragePeriodList:
+	READ_ONLY: List of real insert time period for each attribute in the list
 
-- AttributesPeriodList:
-	READ_ONLY: List of selected period for each attribute in the list
-	
 - AttributesErrorList:
 	READ_ONLY: List of attributes the have failed to insert in HDB++
 	
 - AttributesErrorNumber:
 	READ_ONLY: Number of attributes that have failed to insert in HDB++
 	
-- AttributesRealPeriodList:
-	READ_ONLY: List of real insert time period for each attribute in the list
-	
+- AttributesList:
+	READ_ONLY: List with the atributes to be controlled by the PeriodicArchiver thread
+
 - AttributesOKList:
 	READ_ONLY: List of attributes succesfully inserted in HDB++
 	
 - AttributesOKNumber:
 	READ_ONLY: Number of attributes that have been succesfully inserted in HDB++
+
+- AttributesPeriodList:
+	READ_ONLY: List of selected period for each attribute in the list
 	
-- LoadAverage:
+º- LoadAverage:
 	READ_ONLY: Returns the load average of the DS. The mean value to insert and attribute in HDB++
 	
 - State:

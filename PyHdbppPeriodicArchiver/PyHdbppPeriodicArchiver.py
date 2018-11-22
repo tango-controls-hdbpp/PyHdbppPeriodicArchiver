@@ -2,7 +2,7 @@
 #    "$Header:  $";
 #=============================================================================
 #
-# file :        PyHdbppPeriodicArchiver.py
+# file :        PyPyHdbppPeriodicArchiver.py
 #
 # description : Python source for the Hdb++ peridic archiver device
 #                The class has a thread responsible to insert attributes
@@ -51,6 +51,7 @@ class PeriodicArchiverThread(threading.Thread):
 		self._thread_period = parent.ThreadPeriod / 1000.
 		self._lock = threading.Lock()
 		self._attDict = []
+		self._async_insert = parent.AsynchronousInsert
 		
 		self._endProcess = False
 		self._processEnded = False
@@ -69,13 +70,19 @@ class PeriodicArchiverThread(threading.Thread):
 		try:
 			attData = self._attDict[attribute]
 			if attData['started']:
-				if self._parent._hdbppins.insert_Attr_Async(attribute) == RESULT_OK :
+				
+				if self._async_insert:
+					res = self._parent._hdbppins.insert_Attr_Async(attribute)
+				else:
+					res = self._parent._hdbppins.insert_Attr(attribute)
+					
+				if res == RESULT_OK :
 					attData['last_update'] =  time.time()
 					attData['update'] = True
-					attData['attemps'] = 0
+					attData['attempts'] = 0
 					val = True
 				else:
-					val = False
+          				val = False
 		except Exception, e:
 			msg = "Error inserting attribute %s due to %s"%(attribute, str(e))
 			self._parent.debug_stream(msg)
@@ -95,34 +102,34 @@ class PeriodicArchiverThread(threading.Thread):
 						try:
 							if attData['started']:
 								period = attData['period']
-								period = period / 1000.
 								last_update = attData["last_update"]
 								
 								# calculated period in seconds
-								calculated_period = tnow - last_update
-								if calculated_period > period:
+								calculated_period = (tnow - last_update) * 1000.
+								if calculated_period >= period:
 									any_attr_changes = True
 									ret = self.insertAttribute(attribute)
 									if ret:
-										attData['attemps'] = 0
-										attData['calculated_period'] = calculated_period * 1000.
-										msg = "Inserted attribute %s"%attribute.split("/",3)[3]
+										self._parent.addPeriodData(attribute, calculated_period)
+										attData['attempts'] = 0
+										msg = "Save Inserted attribute %s"%attribute.split("/",3)[3]
 										msg += " with period: %s"%str(attData['period'])
-										msg +=" >> real_period: %s"%str(attData['calculated_period'])
+										msg +=" >> real_period: %s"%str(attData['average_period'])
 										#self._parent.debug_stream(msg)
 									else:
-										if attData['attemps'] >= self._parent.Attemps:
+										if attData['attempts'] >= self._parent.InsertAttempts:
 											attData['update'] = False
-											attData['attemps'] = 0
+											attData['attempts'] = 0
 											msg = "Error inserting %s "%attribute
 											self._parent.error_stream(msg)
+											# Reset pending operatins flag and try again
+											self._parent._hdbppins.reset_Attr_Pending_Ops(attribute)
 										else:
-											attData['attemps'] = attData['attemps'] + 1
+											attData['attempts'] = attData['attempts'] + 1
 						except Exception, e:
 							msg = "Error updating attribute %s definition! %s"%(attribute, str(e))
 							attData['update'] = False
 							self._parent.debug_stream(msg)
-						
 				if any_attr_changes:
 					# Only update AttrLists if any attribute has changed
 					self._parent.updateDataLists()
@@ -278,10 +285,10 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		self.debug_stream("in read_AttributesErrorNumber(): Number of fail attributes %s"%str(self._errorNumber))
 		attr.set_value(self._errorNumber)
 
-	def read_AttributesRealPeriodList(self, attr):
-		msg = '[%s]' % ', '.join(map(str, self._realPeriodList))
-		self.debug_stream("in read_AttributesRealPeriodList(): %s"%msg)
-		attr.set_value(self._realPeriodList)
+	def read_AttributesAveragePeriodList(self, attr):
+		msg = '[%s]' % ', '.join(map(str, self._avgPeriodList))
+		self.debug_stream("in read_AttributesAveragePeriodList(): %s"%msg)
+		attr.set_value(self._avgPeriodList)
 
 	def read_AttributesOKList(self, attr):
 		msg = '[%s]' % ', '.join(map(str, self._OKList))
@@ -299,7 +306,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		default = 0.0
 		for att, item in self._attrDict.iteritems():
 			default = default + item['period']
-			calculated = calculated + item['calculated_period']
+			calculated = calculated + item['average_period']
 			
 		val = float(calculated/default)
 		
@@ -377,6 +384,21 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		self.set_state(PyTango.DevState.INIT)
 		self.set_status("Device Reset")      
 		
+	def AttributeAveragePeriod(self, argin):
+		val = 0
+		try:
+			attr = str(argin)
+			attr = fn.tango.get_full_name(attr, fqdn=True)
+			self.debug_stream("AttributeAveragePeriod() attribute % s"%attr)
+
+			val = self._attrDict[attr]['average_period']
+		except Exception, e:
+			msg = "AttributeAveragePeriod attribute %s not found in Periodic archiver"%attr
+			PyTango.Except.throw_exception('AttributeAveragePeriod',msg,'PyHdbppPeriodicArchiver')
+			return
+		
+		return val
+	
 	def AttributeData(self, argin):
 		try:
 			attr = str(argin)
@@ -506,7 +528,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 	def AttributeStart(self, argin):
 		self.debug_stream("AttributeStart()")
 		
-		if (self.get_state() != PyTango.DevState.RUNNING):
+		if (self.get_state() == PyTango.DevState.RUNNING):
 			msg = "AttributeStart Insert HDB++ thread not running. Start the DS." 
 			PyTango.Except.throw_exception('AttributeInsert',msg,'PyHdbppPeriodicArchiver')
 			return msg
@@ -531,7 +553,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 	def AttributeStop(self, argin):
 		self.debug_stream("AttributeStop()")
 		
-		if (self.get_state() != PyTango.DevState.RUNNING):
+		if (self.get_state() == PyTango.DevState.RUNNING):
 			msg = "AttributeStop Insert HDB++ thread not running. Start the DS." 
 			PyTango.Except.throw_exception('AttributeStop',msg,'PyHdbppPeriodicArchiver')
 			return msg
@@ -570,7 +592,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		self._attributesList = []
 		self._periodList = []
 		self._errorList = []
-		self._realPeriodList = []
+		self._avgPeriodList = []
 		self._OKList = []
 		self._OKNumber = 0
 		self._errorNumber = 0
@@ -600,11 +622,12 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 				aux['period'] = period
 			else:
 				aux['last_update'] = 0
-				aux['calculated_period'] = 0
+				aux['average_period'] = 0
 				aux['update'] = False
 				aux['period'] = period
-				aux['attemps'] = 0
+				aux['attempts'] = 0
 				aux['started'] = True
+				aux['avb_buffer'] = []
 			self._attrDict[attribute.lower()] = aux
 			
 		# Update attributes List
@@ -624,12 +647,12 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		#self.debug_stream("in updateDataLists()")
 		try:
 			self._errorList = []
-			self._realPeriodList = []
+			self._avgPeriodList = []
 			self._OKList = []
 			
 			if self._attrDict != {}:
 				for att in self._attributesList:
-					self._realPeriodList.append(self._attrDict[att]['calculated_period'])
+					self._avgPeriodList.append(self._attrDict[att]['average_period'])
 					if self._attrDict[att]['update'] == False or self._hdbppins.get_Attr_Update_Status(att) == RESULT_NOT_OK:
 						self._errorList.append(att)
 					else:
@@ -645,6 +668,22 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		except Exception, e:
 			self.error_stream("in updateDataLists(): Error lists not updated due to %s"%(str(e)))
 			
+	def addPeriodData(self, attribute, period):
+		if attribute in self._attrDict.keys():
+			vals = self._attrDict[attribute]['avb_buffer']
+			if len(vals) >= self.AverageBufferSize:
+				vals.pop(0)
+			vals.append(period)
+			
+			avg_value = 0
+			for el in vals:
+				avg_value = avg_value + el
+			avg_value = avg_value / len(vals)
+			
+			self._attrDict[attribute]['avb_buffer'] = vals
+			self._attrDict[attribute]['average_period'] = avg_value
+			
+			
 #==================================================================
 #
 #    PyHdbppPeriodicArchiverClass class definition
@@ -659,6 +698,10 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 
 	#    Device Properties
 	device_property_list = {
+		'AsynchronousInsert':
+			[PyTango.DevBoolean,
+			"This property defines if the DS inserts attributes in HD B using an asynchronous thread or not",
+			[True] ],
 		'AttributeList':
 			[PyTango.DevVarStringArray,
 			"List that contains the attributes and their refresh period to be inserted in HDB++.\
@@ -668,6 +711,10 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 			[PyTango.DevBoolean,
 			"This property if set, forces the device serve to automatically launch the insert thread at init",
 			[True] ],
+		'AverageBufferSize':
+			[PyTango.DevShort,
+			"Number of values to store in the temporal buffer that calculates de average period",
+			[3] ],
 		'DefaultAttPeriod':
 			[PyTango.DevDouble,
 			"Default period in ms to archive attributes",
@@ -676,9 +723,9 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 			[PyTango.DevString,
 			"HDB++ configuration manager device with the corresponding HDB++ configuration to access",
 			[""]],   
-		'Attemps':
+		'InsertAttempts':
 			[PyTango.DevShort,
-			"Number of attemps before reporting error to insert an attribute in HDB++ in case of failure",
+			"Number of attempts before reporting error to insert an attribute in HDB++ in case of failure",
 			[2] ],
 		'ThreadPeriod':
 			[PyTango.DevDouble,
@@ -698,6 +745,9 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 		'Reset':
 			[[PyTango.DevVoid, "none"],
 			[PyTango.DevBoolean, "none"]],
+		'AttributeAveragePeriod':
+			[[PyTango.DevString, "none"],
+			[PyTango.DevDouble, "none"]],
 		'AttributeData':
 			[[PyTango.DevString, "none"],
 			[PyTango.DevString, "none"]],
@@ -756,12 +806,12 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 			{
 				'description': "Number of attributes that have failed to insert in HDB++",
 			} ],
-		'AttributesRealPeriodList':
+		'AttributesAveragePeriodList':
 			[[PyTango.DevDouble,
 			PyTango.SPECTRUM,
 			PyTango.READ, 1024],
 			{
-				'description': "List of real insert time period for each attribute in the list",
+				'description': "List of average insert time period for each attribute in the list",
 			} ],
 		'AttributesOKList':
 			[[PyTango.DevString,
