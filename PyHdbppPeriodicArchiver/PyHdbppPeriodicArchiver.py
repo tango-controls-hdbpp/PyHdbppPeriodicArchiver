@@ -32,7 +32,7 @@ import threading
 import time
 import fandango as fn
 
-from HdbppInsert import *
+from libhdbppinsert import *
 
 RESULT_OK = 0
 RESULT_NOT_OK = -1
