@@ -20,11 +20,9 @@ To install as local package:
 print(__doc__)
 
 __MAJOR_VERSION = 1
-__MINOR_VERSION = 0
+__MINOR_VERSION = 1
 
 __version = "%d.%d"%(__MAJOR_VERSION,__MINOR_VERSION)
-
-__scripts = ['./bin/PyHdbppPeriodicArchiver', ] 
 
 __license = 'GPL-3.0' 
 
@@ -41,7 +39,6 @@ setup(name = 'PyHdbppPeriodicArchiver',
     author_email='mbroseta@cells.es',
     url='git@git.cells.es:controls/PyHdbppPeriodicArchiver.git',      
     packages=find_packages(),
-    scripts = __scripts,
     include_package_data = True,
     package_data = package_data,
     entry_points = {
