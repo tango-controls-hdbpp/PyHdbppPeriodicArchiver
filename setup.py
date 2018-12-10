@@ -17,7 +17,7 @@ To install as local package:
     
 ------------------------------------------------------------------------------- 
 """
-print(__doc__)
+#print(__doc__)
 
 __MAJOR_VERSION = 1
 __MINOR_VERSION = 1
