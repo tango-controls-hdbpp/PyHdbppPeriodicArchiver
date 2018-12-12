@@ -407,7 +407,14 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			
 			msg = attr
 			aux = self._attrDict[attr]
-			msg += ": " + str(self._attrDict[attr])
+			#msg += ": " + str(self._attrDict[attr])
+			
+			ret_value = {}
+			ret_value = aux
+			ret_value['name'] = attr
+			
+			msg = str(ret_value)
+
 		except Exception, e:
 			msg = "AttributeData attribute %s not found in Periodic archiver"%attr
 			PyTango.Except.throw_exception('AttributeData',msg,'PyHdbppPeriodicArchiver')
@@ -423,14 +430,14 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 
 			msg = attr
 			aux = self._attrDict[attr]['last_update']
-			msg += ": " + time.strftime("%Y-%m-%d %H:%M:%S",
-							time.gmtime(int(aux)))+str(aux-int(aux))[1:]
+			#msg += ": " + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(int(aux)))+str(aux-int(aux))[1:]
+			msg = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(int(aux)))+str(aux-int(aux))[1:]
 		except Exception, e:
 			msg = "AttributeLastUpdate attribute %s not found in Periodic archiver"%attr
 			PyTango.Except.throw_exception('AttributeLastUpdate',msg,'PyHdbppPeriodicArchiver')
 			return
 		
-		return msg		
+		return msg
 	
 	def AttributeAdd(self, argin):
 		self.debug_stream("AttributeAdd()")
