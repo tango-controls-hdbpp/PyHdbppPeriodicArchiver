@@ -452,30 +452,31 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			PyTango.Except.throw_exception('AttributeAdd',msg,'PyHdbppPeriodicArchiver')
 			return False
 			
-		if fn.tango.read_attribute(attr) is not None:
-			cadena = attr+";period="+str(period)
-			
-			db = PyTango.Database()
-			props = db.get_device_property(self.get_name(), 'AttributeList')		
-			found = False
-			for idx, item in enumerate(props['AttributeList']):
-				aux = item.split(";")[0]
-				if attr.lower() == aux.lower():
-					del props['AttributeList'][idx]
-					props['AttributeList'].append(cadena)
-					found = True
-			if not found:
+		cadena = attr+";period="+str(period)
+		
+		db = PyTango.Database()
+		props = db.get_device_property(self.get_name(), 'AttributeList')		
+		found = False
+		for idx, item in enumerate(props['AttributeList']):
+			aux = item.split(";")[0]
+			if attr.lower() == aux.lower():
+				del props['AttributeList'][idx]
 				props['AttributeList'].append(cadena)
+				found = True
 
-			db.put_device_property(self.get_name(),props)
-			msg = "AttributeAdd(): AttributeList property updated: " + str(props)
-			self.debug_stream(msg)			
-			self.updateAttrDict()
-		else:
-			msg = "AttributeAdd. Incorrect attribute name %s or not responidng!!"%attr
-			PyTango.Except.throw_exception('AttributeAdd',msg,'PyHdbppPeriodicArchiver')
-			self.error_stream(msg)
-			return False
+		if not found:
+			if fn.tango.read_attribute(attr) is not None:
+				props['AttributeList'].append(cadena)
+			else:
+				msg = "AttributeAdd. Incorrect attribute name %s or not responidng!!"%attr
+				PyTango.Except.throw_exception('AttributeAdd',msg,'PyHdbppPeriodicArchiver')
+				self.error_stream(msg)
+				return False
+
+		db.put_device_property(self.get_name(),props)
+		msg = "AttributeAdd(): AttributeList property updated: " + str(props)
+		self.debug_stream(msg)
+		self.updateAttrDict()
 		return True
 	
 	def AttributeInsert(self, argin):
