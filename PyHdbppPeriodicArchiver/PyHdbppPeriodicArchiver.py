@@ -205,8 +205,8 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 					elif 'password' in item:
 						self._passw = val
 					elif 'libname' in item:
-						#self._libname = val
-						self._libname = "/homelocal/sicilia/local/libhdbpp-mysql/lib/libhdb++mysql.so"
+						self._libname = val
+						#self._libname = "/homelocal/sicilia/local/libhdbpp-mysql/lib/libhdb++mysql.so"
 					elif 'lightschema' in item:
 						self._lightschema = val
 					elif 'port' in item:
