@@ -20,7 +20,7 @@ To install as local package:
 #print(__doc__)
 
 __MAJOR_VERSION = 1
-__MINOR_VERSION = 4
+__MINOR_VERSION = 5
 
 __version = "%d.%d"%(__MAJOR_VERSION,__MINOR_VERSION)
 
