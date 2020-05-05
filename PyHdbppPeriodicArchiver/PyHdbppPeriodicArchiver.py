@@ -80,9 +80,10 @@ class PeriodicArchiverThread(threading.Thread):
 					attData['last_update'] =  time.time()
 					attData['update'] = True
 					attData['attempts'] = 0
+					attData['error_st'] = False
 					val = True
 				else:
-          				val = False
+					val = False
 		except Exception, e:
 			msg = "Error inserting attribute %s due to %s"%(attribute, str(e))
 			self._parent.debug_stream(msg)
@@ -103,29 +104,39 @@ class PeriodicArchiverThread(threading.Thread):
 							if attData['started']:
 								period = attData['period']
 								last_update = attData["last_update"]
+
 								
 								# calculated period in seconds
-								calculated_period = (tnow - last_update) * 1000.
-								if calculated_period >= period:
+								calculated_period = (tnow - last_update) * 1000.0
+								if calculated_period >= period and attData['error_st'] == False:
 									any_attr_changes = True
 									ret = self.insertAttribute(attribute)
 									if ret:
 										self._parent.addPeriodData(attribute, calculated_period)
 										attData['attempts'] = 0
+										attData['error_st'] = False
 										msg = "Save Inserted attribute %s"%attribute.split("/",3)[3]
 										msg += " with period: %s"%str(attData['period'])
 										msg +=" >> real_period: %s"%str(attData['average_period'])
 										#self._parent.debug_stream(msg)
 									else:
-										if attData['attempts'] >= self._parent.InsertAttempts:
+										num_attempts = self._parent.InsertAttempts
+										if num_attempts == -1:
 											attData['update'] = False
 											attData['attempts'] = 0
-											msg = "Error inserting %s "%attribute
+											attData['error_st'] = True
+											msg = "Error inserting %s. Stopping retries!!"%attribute
 											self._parent.error_stream(msg)
-											# Reset pending operatins flag and try again
-											self._parent._hdbppins.reset_Attr_Pending_Ops(attribute)
 										else:
-											attData['attempts'] = attData['attempts'] + 1
+											if attData['attempts'] >= num_attempts:
+												attData['update'] = False
+												attData['attempts'] = 0
+												msg = "Error inserting %s "%attribute
+												self._parent.error_stream(msg)
+												# Reset pending operatins flag and try again
+												self._parent._hdbppins.reset_Attr_Pending_Ops(attribute)
+											else:
+												attData['attempts'] = attData['attempts'] + 1
 						except Exception, e:
 							msg = "Error updating attribute %s definition! %s"%(attribute, str(e))
 							attData['update'] = False
@@ -582,6 +593,12 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			msg = "%s NOT in AtributeList"%attr
 		
 		return msg
+	
+
+	def ResetErrorAttributes(self):
+		self.debug_stream("ResetErrorAttributes()")
+		self.resetAttrErrorList()
+		
 
 	def UpdateAttributeList(self):
 		self.debug_stream("UpdateAttributeList()")
@@ -635,6 +652,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 				aux['period'] = period
 				aux['attempts'] = 0
 				aux['started'] = True
+				aux['error_st'] = False
 				aux['avg_per_buffer'] = []
 			self._attrDict[attribute.lower()] = aux
 			
@@ -661,7 +679,9 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			if self._attrDict != {}:
 				for att in self._attributesList:
 					self._avgPeriodList.append(self._attrDict[att]['average_period'])
-					if self._attrDict[att]['update'] == False or self._hdbppins.get_Attr_Update_Status(att) == RESULT_NOT_OK:
+					if self._attrDict[att]['update'] == False\
+						or self._hdbppins.get_Attr_Update_Status(att) == RESULT_NOT_OK:
+						self._attrDict[att]['error_st'] = True
 						self._errorList.append(att)
 					else:
 						self._OKList.append(att)
@@ -690,6 +710,18 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			
 			self._attrDict[attribute]['avg_per_buffer'] = vals
 			self._attrDict[attribute]['average_period'] = avg_value
+			
+	def resetAttrErrorList(self):		
+		if self._periodicArch_thread is not None:
+			for attribute in self._errorList:
+				try:
+					if self._attrDict[attribute]['started']:
+						self._attrDict[attribute]['error_st'] = False
+						self._hdbppins.reset_Attr_Pending_Ops(attribute)
+						self._periodicArch_thread.insertAttribute(attribute)
+				except:
+					msg = "Attribute %s failed"%attribute
+					self.error_stream(msg)
 			
 			
 #==================================================================
@@ -776,7 +808,10 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 			[PyTango.DevString, "none"]],			
 		'AttributeStop':
 			[[PyTango.DevVarStringArray, "none"],
-			[PyTango.DevString, "none"]],			
+			[PyTango.DevString, "none"]],
+		'ResetErrorAttributes':
+			[[PyTango.DevVoid, "none"],
+			[PyTango.DevVoid, "none"]],
 		'UpdateAttributeList':
 			[[PyTango.DevVoid, "none"],
 			[PyTango.DevVoid, "none"]],
