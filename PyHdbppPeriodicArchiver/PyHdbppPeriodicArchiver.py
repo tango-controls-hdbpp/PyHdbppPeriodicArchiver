@@ -233,10 +233,24 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		
 		# Create Attribute dictionary
 		self.updateAttrDict()
-
+		
+		dgb_level = PyTango.Logger.get_level(self.get_logger())
+		if dgb_level >= 600:
+			# Tango Debug Level 600 = MSG_DEBUG 0 in libhdbppinsert
+			debug_level = 0
+		elif dgb_level >= 500:
+			# Tango INFO Level 500 = MSG_INFO 10 in libhdbppinsert
+			debug_level = 10
+		elif dgb_level >= 200:
+			# Tango FATAL 200, ERROR 300 or WARN 400 = MSG_ERROR 20 in libhdbppinsert
+			debug_level = 20
+		else:
+			# No debug
+			debug_level = 50
+			
 		try:
 			self._hdbppins = HdbppInsert(self._user, self._passw, self._dbhost, self._dbname,
-								self._libname, self._lightschema, self._port)   
+								self._libname, self._lightschema, self._port, debug_level)   
 			if not self._hdbppins.is_Connected():
 				self.set_state(PyTango.DevState.FAULT)
 				msg = "Not possible to connect to selected Database in schema!"
@@ -250,6 +264,8 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			self.debug_stream(msg)
 			self._hdbppins = None
 			return
+		
+		
 		
 		self.set_state(PyTango.DevState.ON)
 		self.status_string = "Device Initialized!"
@@ -594,7 +610,16 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		
 		return msg
 	
-
+	
+	def GetNumPendingThreads(self):
+		self.debug_stream("GetNumPendingThreads()")
+		if self._hdbppins is not None:
+			val = self._hdbppins.get_Pending_Threads()
+			return val
+		else:
+			return 0
+		
+		
 	def ResetErrorAttributes(self):
 		self.debug_stream("ResetErrorAttributes()")
 		self.resetAttrErrorList()
@@ -681,7 +706,8 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 					self._avgPeriodList.append(self._attrDict[att]['average_period'])
 					if self._attrDict[att]['update'] == False\
 						or self._hdbppins.get_Attr_Update_Status(att) == RESULT_NOT_OK:
-						self._attrDict[att]['error_st'] = True
+						if self.InsertAttempts == -1:
+							self._attrDict[att]['error_st'] = True
 						self._errorList.append(att)
 					else:
 						self._OKList.append(att)
@@ -809,9 +835,12 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 		'AttributeStop':
 			[[PyTango.DevVarStringArray, "none"],
 			[PyTango.DevString, "none"]],
+		'GetNumPendingThreads':
+			[[PyTango.DevVoid, "none"],
+			[PyTango.DevLong, "none"]],			
 		'ResetErrorAttributes':
 			[[PyTango.DevVoid, "none"],
-			[PyTango.DevVoid, "none"]],
+			[PyTango.DevVoid, "none"]],			
 		'UpdateAttributeList':
 			[[PyTango.DevVoid, "none"],
 			[PyTango.DevVoid, "none"]],
