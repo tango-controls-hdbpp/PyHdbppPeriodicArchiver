@@ -69,24 +69,23 @@ class PeriodicArchiverThread(threading.Thread):
 		val = False
 		try:
 			attData = self._attDict[attribute]
-			if attData['started']:
+			if self._async_insert:
+				res = self._parent._hdbppins.insert_Attr_Async(attribute)
+			else:
+				res = self._parent._hdbppins.insert_Attr(attribute)
 				
-				if self._async_insert:
-					res = self._parent._hdbppins.insert_Attr_Async(attribute)
-				else:
-					res = self._parent._hdbppins.insert_Attr(attribute)
-					
-				if res == RESULT_OK :
-					attData['last_update'] =  time.time()
-					attData['update'] = True
-					attData['attempts'] = 0
-					attData['error_st'] = False
-					val = True
-				else:
-					val = False
+			if res == RESULT_OK :
+				attData['last_update'] =  time.time()
+				attData['update'] = True
+				attData['attempts'] = 0
+				attData['error_st'] = False
+				val = True
+			else:
+				val = False
 		except Exception, e:
 			msg = "Error inserting attribute %s due to %s"%(attribute, str(e))
 			self._parent.debug_stream(msg)
+
 		return val
        
 	def run(self): 
@@ -457,6 +456,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 
 			msg = attr
 			aux = self._attrDict[attr]['last_update']
+			
 			#msg += ": " + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(int(aux)))+str(aux-int(aux))[1:]
 			msg = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(int(aux)))+str(aux-int(aux))[1:]
 		except Exception, e:
@@ -517,15 +517,15 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			PyTango.Except.throw_exception('AttributeInsert',msg,'PyHdbppPeriodicArchiver')
 			return False
 		
+		ret_value = False
 		if self._periodicArch_thread is not None:
 			try:
-				if self._attrDict[attr]['started']:
-					return self._periodicArch_thread.insertAttribute(attr)
+				ret_value = self._periodicArch_thread.insertAttribute(attr)
 			except:
 				msg = "Attribute %s not started"%attr
 				PyTango.Except.throw_exception('AttributeInsert',msg,'PyHdbppPeriodicArchiver')
-		else:
-			return False
+
+		return ret_value
 	
 	def AttributeRemove(self, argin):
 		self.debug_stream("AttributeRemove()")
@@ -563,7 +563,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 	def AttributeStart(self, argin):
 		self.debug_stream("AttributeStart()")
 		
-		if (self.get_state() == PyTango.DevState.RUNNING):
+		if (self.get_state() != PyTango.DevState.RUNNING):
 			msg = "AttributeStart Insert HDB++ thread not running. Start the DS." 
 			PyTango.Except.throw_exception('AttributeInsert',msg,'PyHdbppPeriodicArchiver')
 			return msg
@@ -576,19 +576,21 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			PyTango.Except.throw_exception('AttributeInsert',msg,'PyHdbppPeriodicArchiver')
 			return False
 		
-		if attr in self._attrDict():
+		if attr in self._attrDict.keys():
 			self._attrDict[attr]['started']=True
-			self.updateAttrDict()
+			# Update periodic Thread if enabled
+			if self._periodicArch_thread is not None:
+				self._periodicArch_thread.setAttributeDict(self._attrDict)
 			msg ="%s Started"%attr
 		else:
-			msg = "%s NOT in AtributeList"%attr
+			msg = "%s NOT in AttributeList"%attr
 		
 		return msg
 
 	def AttributeStop(self, argin):
 		self.debug_stream("AttributeStop()")
 		
-		if (self.get_state() == PyTango.DevState.RUNNING):
+		if (self.get_state() != PyTango.DevState.RUNNING):
 			msg = "AttributeStop Insert HDB++ thread not running. Start the DS." 
 			PyTango.Except.throw_exception('AttributeStop',msg,'PyHdbppPeriodicArchiver')
 			return msg
@@ -601,12 +603,14 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			PyTango.Except.throw_exception('AttributeStop',msg,'PyHdbppPeriodicArchiver')
 			return False
 		
-		if attr in self._attrDict():
+		if attr in self._attrDict.keys():
 			self._attrDict[attr]['started']=False
-			self.updateAttrDict()
-			msg ="%s Started"%attr
+			# Update periodic Thread if enabled
+			if self._periodicArch_thread is not None:
+				self._periodicArch_thread.setAttributeDict(self._attrDict)
+			msg ="%s Stopped!!"%attr
 		else:
-			msg = "%s NOT in AtributeList"%attr
+			msg = "%s NOT in AttributeList"%attr
 		
 		return msg
 	
@@ -819,28 +823,28 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 			[PyTango.DevString, "none"]],
 		'AttributeLastUpdate':
 			[[PyTango.DevString, "none"],
-			[PyTango.DevString, "none"]],			
+			[PyTango.DevString, "none"]],
 		'AttributeAdd':
 			[[PyTango.DevVarStringArray, "none"],
 			[PyTango.DevBoolean, "none"]],
 		'AttributeInsert':
-			[[PyTango.DevVarStringArray, "none"],
+			[[PyTango.DevString, "none"],
 			[PyTango.DevBoolean, "none"]],
 		'AttributeRemove':
 			[[PyTango.DevString, "none"],
 			[PyTango.DevBoolean, "none"]],
 		'AttributeStart':
-			[[PyTango.DevVarStringArray, "none"],
-			[PyTango.DevString, "none"]],			
+			[[PyTango.DevString, "none"],
+			[PyTango.DevString, "none"]],
 		'AttributeStop':
-			[[PyTango.DevVarStringArray, "none"],
+			[[PyTango.DevString, "none"],
 			[PyTango.DevString, "none"]],
 		'GetNumPendingThreads':
 			[[PyTango.DevVoid, "none"],
-			[PyTango.DevLong, "none"]],			
+			[PyTango.DevLong, "none"]],
 		'ResetErrorAttributes':
 			[[PyTango.DevVoid, "none"],
-			[PyTango.DevVoid, "none"]],			
+			[PyTango.DevVoid, "none"]],
 		'UpdateAttributeList':
 			[[PyTango.DevVoid, "none"],
 			[PyTango.DevVoid, "none"]],
