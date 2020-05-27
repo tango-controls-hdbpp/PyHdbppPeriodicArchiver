@@ -339,6 +339,15 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		self.debug_stream("in read_LoadAverage(): Load average to insert attributes: %s"%str(val))
 		attr.set_value(val)
 		
+	def read_NumPendingThreads(self, attr):
+		self.debug_stream("in read_AttributesOKNumber():")
+		val = None
+		if self._hdbppins is not None:
+			val = self._hdbppins.get_Pending_Threads()
+			self.debug_stream("in read_AttributesOKNumber(): Number of pendign threads %s"%str(val))
+		attr.set_value(val)
+		
+		
 
 #==================================================================
 #
@@ -613,16 +622,6 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 			msg = "%s NOT in AttributeList"%attr
 		
 		return msg
-	
-	
-	def GetNumPendingThreads(self):
-		self.debug_stream("GetNumPendingThreads()")
-		if self._hdbppins is not None:
-			val = self._hdbppins.get_Pending_Threads()
-			return val
-		else:
-			return 0
-		
 		
 	def ResetErrorAttributes(self):
 		self.debug_stream("ResetErrorAttributes()")
@@ -839,9 +838,6 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 		'AttributeStop':
 			[[PyTango.DevString, "none"],
 			[PyTango.DevString, "none"]],
-		'GetNumPendingThreads':
-			[[PyTango.DevVoid, "none"],
-			[PyTango.DevLong, "none"]],
 		'ResetErrorAttributes':
 			[[PyTango.DevVoid, "none"],
 			[PyTango.DevVoid, "none"]],
@@ -910,6 +906,13 @@ class PyHdbppPeriodicArchiverClass(PyTango.DeviceClass):
 			{
 				'description': "Returns the load average of the DS. The mean value to insert and attribute in HDB++",
 			} ],
+        'NumPendingThreads':     
+			[[PyTango.DevDouble,
+			PyTango.SCALAR,
+			PyTango.READ],
+			{
+				'description': "Returns the number of active threads in the libhdbppinsert. Average value should be 0. Values greater than 0, could mean problems inserting data",
+			} ]
 		}
 
 #------------------------------------------------------------------
