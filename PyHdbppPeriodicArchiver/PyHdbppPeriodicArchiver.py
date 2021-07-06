@@ -321,6 +321,11 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		self.debug_stream("in read_AttributesOKList(): %s"%msg)
 		attr.set_value(self._OKList)
 
+	def read_AttributesNokList(self, attr):
+		msg = '[%s]' % ', '.join(map(str, self._discarded))
+		self.debug_stream("in read_AttributesNokList(): %s"%msg)
+		attr.set_value(self._discarded)
+
 	def read_AttributesOKNumber(self, attr):
 		self.debug_stream("in read_AttributesOKNumber(): Number of fail attributes %s"%str(self._OKNumber))
 		attr.set_value(self._OKNumber)
@@ -649,6 +654,7 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 		self._OKList = []
 		self._OKNumber = 0
 		self._errorNumber = 0
+                self._discarded = []
 		
 		self.get_device_properties(self.get_device_class())
 		
@@ -670,10 +676,20 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 				attribute = item.lower()  
 				
 			aux = {}                        
-			if attribute in self._attrDict.keys():
+			check = fn.read_attribute(attribute,timeout=100)
+                        
+                        if attribute in self._attrDict.keys():
+                            if check is None:
+                                self._attrDict.pop(attribute)
+                            else:
 				aux = self._attrDict[attribute]
 				aux['period'] = period
 			else:
+                            if check is None:
+                                self.error_stream('%s discarded!' % attribute)
+                                self._discarded.append(attribute)
+                                continue
+                            else:
 				aux['last_update'] = 0
 				aux['average_period'] = 0
 				aux['update'] = False
@@ -718,10 +734,15 @@ class PyHdbppPeriodicArchiver(PyTango.Device_4Impl):
 				self._OKNumber = len(self._OKList)
 				self._errorNumber = len(self._errorList)
 				
-			if self.get_state() == PyTango.DevState.RUNNING:
-				msg = "RUNNING: Updated %s attributes Ok, %s Fail!"%(str(self._OKNumber), str(self._errorNumber))
-				self.debug_stream(msg)
-				self.set_status(msg)
+			if self.get_state() in (PyTango.DevState.RUNNING,PyTango.DevState.ALARM):
+                            if self._errorNumber: 
+                                self.set_state(PyTango.DevState.ALARM)
+                            else: 
+                                self.set_state(PyTango.DevState.RUNNING)
+				msg = "%s: Updated %s attributes Ok, %s Fail!"%(
+                            self.get_state(),str(self._OKNumber), str(self._errorNumber))
+                            self.debug_stream(msg)
+                            self.set_status(msg)
 		except Exception, e:
 			self.error_stream("in updateDataLists(): Error lists not updated due to %s"%(str(e)))
 			
